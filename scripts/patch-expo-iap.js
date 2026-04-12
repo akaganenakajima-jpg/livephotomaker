@@ -49,14 +49,14 @@ if (content.includes(OLD_STOREFRONT) && !content.includes(NEW_STOREFRONT)) {
 //
 // After:
 //   let verificationResult = try await AppTransaction.shared
-//   let appTransaction = verificationResult.payloadValue
-//   return [ "appTransactionID": appTransaction.id, ... ]
+//   let appTransaction = try verificationResult.payloadValue
+//   return [ "appTransactionID": appTransaction.appID, ... ]
 
 const OLD_GET_APP_TX = `                guard let appTransaction = try await AppTransaction.shared else {
                     return nil
                 }`;
 const NEW_GET_APP_TX = `                let verificationResult = try await AppTransaction.shared
-                let appTransaction = verificationResult.payloadValue`;
+                let appTransaction = try verificationResult.payloadValue`;
 
 if (content.includes(OLD_GET_APP_TX)) {
   content = content.replace(OLD_GET_APP_TX, NEW_GET_APP_TX);
@@ -64,28 +64,29 @@ if (content.includes(OLD_GET_APP_TX)) {
   changed = true;
 }
 
-// Fix the member accesses: VerificationResult has no appAppleId etc.
-// appAppleId → id  (UInt64, the App Apple ID)
+// Fix the member accesses on AppTransaction (StoreKit 2, iOS 16+).
+// Verified against Apple docs: AppTransaction has appID, bundleID,
+// appVersion, originalAppVersion, originalPurchaseDate, environment,
+// deviceVerification, deviceVerificationNonce, signedDate.
+// It does NOT have: id, appAppleId, appAccountToken, originalAppAccountToken.
+
+// appAppleId → appID  (UInt64, the App Apple ID)
 if (content.includes('appTransaction.appAppleId')) {
-  content = content.replace('appTransaction.appAppleId', 'appTransaction.id');
-  console.log('[patch-expo-iap] Fix2b: appAppleId → id');
+  content = content.replace('appTransaction.appAppleId', 'appTransaction.appID');
+  console.log('[patch-expo-iap] Fix2b: appAppleId → appID');
   changed = true;
 }
 
-// originalAppAccountToken → appAccountToken
+// originalAppAccountToken does not exist on AppTransaction (it's on Transaction).
+// Replace the whole dictionary entry with nil to keep the response shape.
 if (content.includes('appTransaction.originalAppAccountToken')) {
   content = content.replace(
-    'appTransaction.originalAppAccountToken',
-    'appTransaction.appAccountToken?.uuidString'
+    '"originalAppAccountToken": appTransaction.originalAppAccountToken',
+    '"originalAppAccountToken": nil as String?'
   );
-  console.log('[patch-expo-iap] Fix2c: originalAppAccountToken → appAccountToken');
+  console.log('[patch-expo-iap] Fix2c: originalAppAccountToken → nil (not available on AppTransaction)');
   changed = true;
 }
-
-// originalPurchaseDate → originalPurchaseDate (this one actually exists on AppTransaction)
-// but we need to check — it might be fine. Let's check the build error list.
-// The error says "has no member 'originalPurchaseDate'" on VerificationResult,
-// which is fixed by Fix2a (now accessing payloadValue). So this should be fine.
 
 // ── Fix 3: IapErrorCode.featureNotSupported — add to Types.swift ──────────
 if (fs.existsSync(typesPath)) {
