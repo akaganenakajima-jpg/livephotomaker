@@ -8,7 +8,7 @@
     "node": ">=20.11.0 <21"
   },
   "scripts": {
-    "postinstall": "tsc -p modules/expo-live-photo-exporter/plugin && node scripts/patch-expo-iap.js",
+    "postinstall": "tsc -p modules/expo-live-photo-exporter/plugin && node scripts/patch-expo-iap.js && node scripts/sync-admob-app-json.js",
     "build:plugin": "tsc -p modules/expo-live-photo-exporter/plugin",
     "start": "expo start",
     "start:dev-client": "expo start --dev-client",
@@ -26,7 +26,8 @@
     "check:iap": "bash scripts/hooks/check-iap-identifiers.sh",
     "check:bundle": "bash scripts/hooks/check-bundle-identifier.sh",
     "check:placeholders": "bash scripts/hooks/check-placeholders.sh",
-    "check:all": "npm run lint && npm run typecheck && npm run test && npm run check:marketing && npm run check:iap && npm run check:bundle && npm run check:placeholders",
+    "check:admob": "bash scripts/hooks/check-admob-config.sh",
+    "check:all": "npm run lint && npm run typecheck && npm run test && npm run check:marketing && npm run check:iap && npm run check:bundle && npm run check:placeholders && npm run check:admob",
     "preflight": "npm run check:all",
     "eas:login": "eas login",
     "eas:configure": "eas build:configure",
