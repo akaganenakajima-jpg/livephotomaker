@@ -1,0 +1,57 @@
+disabled_rules:
+  - trailing_whitespace
+  - todo
+
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - closure_spacing
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - redundant_nil_coalescing
+  - sorted_imports
+  - unused_import
+  - unused_declaration
+
+included:
+  - App
+  - Features
+  - Services
+  - Models
+  - Extensions
+  - Tests
+
+excluded:
+  - build
+  - DerivedData
+  - .build
+  - Pods
+  - Resources/Assets.xcassets
+  - scripts
+
+line_length:
+  warning: 140
+  error: 200
+  ignores_comments: true
+  ignores_urls: true
+
+file_length:
+  warning: 400
+  error: 600
+
+type_body_length:
+  warning: 300
+  error: 500
+
+function_body_length:
+  warning: 60
+  error: 100
+
+identifier_name:
+  min_length: 2
+  excluded:
+    - id
+    - x
+    - y
+
+reporter: "xcode"

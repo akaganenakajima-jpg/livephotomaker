@@ -1,0 +1,51 @@
+export const ja = {
+  'home.title': 'Video to Live Photo',
+  'home.subtitle': '動画からLive Photoを作成して保存します。',
+  'home.start': '動画を選ぶ',
+  'home.settings': '設定',
+
+  'onboarding.title': 'このアプリについて',
+  'onboarding.body':
+    '動画からLive Photoを作って写真ライブラリへ保存します。壁紙の設定はiPhoneの「設定」Appから行ってください。',
+  'onboarding.confirm': 'はじめる',
+
+  'export.options.title': '書き出し方法を選ぶ',
+  'export.options.standard': '標準画質で続ける',
+  'export.options.standard.detail': '無料で保存できます。',
+  'export.options.rewarded': '広告を見て高画質を1回試す',
+  'export.options.rewarded.detail': '短い広告を見ると、高画質で1回だけ保存できます。',
+  'export.options.premium': '高画質を買い切りで解放',
+  'export.options.premium.detail': '一度の購入で高画質がいつでも使えます。広告も非表示になります。',
+
+  'export.progress.title': 'Live Photoを作成中…',
+  'export.progress.hint': 'しばらくお待ちください。画面を閉じないでください。',
+
+  'preview.title': 'プレビュー',
+  'preview.hint': '長押しするとLive Photoが再生されます。',
+
+  'success.title': '保存しました',
+  'success.body':
+    '写真ライブラリに保存されました。ロック画面で動く壁紙として使うには、次の手順で設定してください。',
+  'success.step1': '1. 設定Appを開く',
+  'success.step2': '2. 「壁紙」を選ぶ',
+  'success.step3': '3. 「新しい壁紙を追加」を選ぶ',
+  'success.step4': '4. 「写真」→「Live Photo」から選ぶ',
+  'success.done': '完了',
+
+  'paywall.title': '高画質解放',
+  'paywall.body':
+    '一度の購入で高画質書き出しがいつでも使えるようになります。広告も非表示になります。',
+  'paywall.cta.buy': '購入する',
+  'paywall.cta.restore': '購入を復元',
+
+  'error.photo_permission': '写真ライブラリへのアクセスが必要です。設定から許可してください。',
+  'error.video_unsupported': 'この動画形式には対応していません。',
+  'error.video_too_long': '動画が長すぎます。短いクリップを選んでください。',
+  'error.export_failed': '書き出しに失敗しました。もう一度お試しください。',
+  'error.ad_unavailable': '広告を読み込めませんでした。標準画質で続行できます。',
+  'error.purchase_failed': '購入処理に失敗しました。時間をおいて再度お試しください。',
+  'error.native_unavailable':
+    'Live Photo作成機能が利用できません。Development Buildをお使いください。',
+} as const;
+
+export type TranslationKey = keyof typeof ja;

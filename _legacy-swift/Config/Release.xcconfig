@@ -1,0 +1,16 @@
+#include "Shared.xcconfig"
+
+// Release-only build settings
+SWIFT_ACTIVE_COMPILATION_CONDITIONS =
+SWIFT_OPTIMIZATION_LEVEL = -O
+GCC_OPTIMIZATION_LEVEL = s
+ENABLE_TESTABILITY = NO
+ONLY_ACTIVE_ARCH = NO
+
+// Production ad unit IDs are managed via CI Secrets or a
+// gitignored Config/Secrets.xcconfig file that sets these:
+// ADMOB_REWARDED_UNIT_ID = ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX
+// ADMOB_APPLICATION_ID   = ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX
+// Fallback to test IDs to keep the project buildable out-of-the-box:
+ADMOB_REWARDED_UNIT_ID = ca-app-pub-3940256099942544/1712485313
+ADMOB_APPLICATION_ID   = ca-app-pub-3940256099942544~1458002511
