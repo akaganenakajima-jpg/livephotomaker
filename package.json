@@ -37,6 +37,7 @@
     "eas:submit:ios": "eas submit --platform ios"
   },
   "dependencies": {
+    "expo-live-photo-exporter": "file:./modules/expo-live-photo-exporter",
     "@expo/vector-icons": "^14.0.0",
     "expo": "~51.0.0",
     "expo-av": "~14.0.0",
