@@ -49,8 +49,8 @@ const withExpoLivePhotoExporter = (config) => {
         (cfg) => {
             const podfilePath = path.join(cfg.modRequest.platformProjectRoot, 'Podfile');
             let podfile = fs.readFileSync(podfilePath, 'utf-8');
-            const POD_LINE = "  pod 'ExpoLivePhotoExporter', :path => '../modules/expo-live-photo-exporter'";
-            const POD_MARKER = '# expo-live-photo-exporter: pod-added';
+            const POD_LINE = "  pod 'ExpoLivePhotoExporter', :path => '../modules/expo-live-photo-exporter/ios'";
+            const POD_MARKER = '# expo-live-photo-exporter: pod-added-v2';
             if (podfile.includes(POD_MARKER)) {
                 return cfg; // already injected
             }
