@@ -19,6 +19,37 @@ import { withDangerousMod, withInfoPlist, withXcodeProject } from 'expo/config-p
  * Values are only inserted when missing — existing translations are kept.
  */
 const withExpoLivePhotoExporter: ConfigPlugin<void> = (config) => {
+  // Step 0 — Explicitly add the pod to the Podfile so it is compiled even
+  // when Expo Autolinking fails to pick up the local file: dependency.
+  config = withDangerousMod(config, [
+    'ios',
+    (cfg) => {
+      const podfilePath = path.join(cfg.modRequest.platformProjectRoot, 'Podfile');
+      let podfile = fs.readFileSync(podfilePath, 'utf-8');
+
+      const POD_LINE =
+        "  pod 'ExpoLivePhotoExporter', :path => '../modules/expo-live-photo-exporter'";
+      const POD_MARKER = '# expo-live-photo-exporter: pod-added';
+
+      if (podfile.includes(POD_MARKER)) {
+        return cfg; // already injected
+      }
+
+      // Insert right after `use_expo_modules!` which is always present in
+      // the Expo-generated Podfile inside the main app target block.
+      const anchor = 'use_expo_modules!';
+      if (podfile.includes(anchor)) {
+        podfile = podfile.replace(
+          anchor,
+          `${anchor}\n  ${POD_MARKER}\n${POD_LINE}`,
+        );
+      }
+
+      fs.writeFileSync(podfilePath, podfile);
+      return cfg;
+    },
+  ]);
+
   // Step 1 — Info.plist usage descriptions
   config = withInfoPlist(config, (cfg) => {
     const plist = cfg.modResults;
