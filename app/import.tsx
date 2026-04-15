@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { t } from '@/i18n';
 import { useServices } from '@/services/ServiceContext';
 import { logger } from '@/utils/logger';
 
@@ -53,9 +54,9 @@ export default function ImportScreen() {
   if (state === 'error') {
     return (
       <View style={styles.root}>
-        <Text style={styles.errorText}>動画を読み込めませんでした。</Text>
+        <Text style={styles.errorText}>{t('import.error')}</Text>
         <Pressable style={styles.button} onPress={() => router.back()}>
-          <Text style={styles.buttonText}>戻る</Text>
+          <Text style={styles.buttonText}>{t('import.back')}</Text>
         </Pressable>
       </View>
     );
@@ -64,7 +65,7 @@ export default function ImportScreen() {
   return (
     <View style={styles.root}>
       <ActivityIndicator />
-      <Text style={styles.hint}>動画を選んでください…</Text>
+      <Text style={styles.hint}>{t('import.loading')}</Text>
     </View>
   );
 }

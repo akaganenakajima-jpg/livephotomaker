@@ -48,4 +48,36 @@ export const en: Record<TranslationKey, string> = {
   'error.ad_unavailable': 'Ad could not be loaded. You can continue in standard quality.',
   'error.purchase_failed': 'Purchase failed. Please try again later.',
   'error.native_unavailable': 'Live Photo creation is unavailable. Please use a Development Build.',
+  'error.title': 'Error',
+
+  // Navigation headers
+  'nav.home': 'Video to Live Photo',
+  'nav.import': 'Choose Video',
+  'nav.trim': 'Trim',
+  'nav.export_options': 'Export Options',
+  'nav.export_progress': 'Creating…',
+  'nav.preview': 'Preview',
+  'nav.success': 'Saved',
+  'nav.paywall': 'Unlock High Quality',
+  'nav.settings': 'Settings',
+  'nav.debug': 'Debug Info',
+
+  // Settings screen
+  'settings.plan_label': 'Current Plan',
+  'settings.plan_premium': 'High Quality (One-time)',
+  'settings.plan_trial': 'High Quality (1 time)',
+  'settings.plan_free': 'Standard Quality',
+  'settings.restore': 'Restore Purchase',
+  'settings.buy_premium': 'Buy High Quality Unlock',
+  'settings.debug': 'Open Debug Info',
+
+  // Trim screen
+  'trim.title': 'Check Clip Length',
+  'trim.body': 'The first ~3 seconds will be used for the Live Photo. You can adjust this later.',
+  'trim.next': 'Next',
+
+  // Import screen
+  'import.loading': 'Selecting a video…',
+  'import.error': 'Failed to load video.',
+  'import.back': 'Back',
 };

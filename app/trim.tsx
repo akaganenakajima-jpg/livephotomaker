@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { t } from '@/i18n';
 
 /**
  * Trim screen. In this scaffold we skip the actual trimming UI and just
@@ -13,10 +14,8 @@ export default function TrimScreen() {
 
   return (
     <View style={styles.root}>
-      <Text style={styles.title}>クリップの長さを確認</Text>
-      <Text style={styles.body}>
-        Live Photo には先頭 3 秒前後が使われます。必要に応じて後で調整できます。
-      </Text>
+      <Text style={styles.title}>{t('trim.title')}</Text>
+      <Text style={styles.body}>{t('trim.body')}</Text>
       <Pressable
         style={styles.primary}
         onPress={() =>
@@ -26,7 +25,7 @@ export default function TrimScreen() {
           })
         }
       >
-        <Text style={styles.primaryText}>次へ</Text>
+        <Text style={styles.primaryText}>{t('trim.next')}</Text>
       </Pressable>
     </View>
   );

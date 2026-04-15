@@ -46,6 +46,38 @@ export const ja = {
   'error.purchase_failed': '購入処理に失敗しました。時間をおいて再度お試しください。',
   'error.native_unavailable':
     'Live Photo作成機能が利用できません。Development Buildをお使いください。',
+  'error.title': 'エラー',
+
+  // Navigation headers
+  'nav.home': 'Video to Live Photo',
+  'nav.import': '動画を選ぶ',
+  'nav.trim': 'トリム',
+  'nav.export_options': '書き出し方法',
+  'nav.export_progress': '作成中',
+  'nav.preview': 'プレビュー',
+  'nav.success': '保存しました',
+  'nav.paywall': '高画質解放',
+  'nav.settings': '設定',
+  'nav.debug': 'デバッグ情報',
+
+  // Settings screen
+  'settings.plan_label': '現在のプラン',
+  'settings.plan_premium': '高画質 (買い切り)',
+  'settings.plan_trial': '高画質 (1回のみ)',
+  'settings.plan_free': '標準画質',
+  'settings.restore': '購入を復元',
+  'settings.buy_premium': '高画質解放を購入',
+  'settings.debug': 'デバッグ情報を開く',
+
+  // Trim screen
+  'trim.title': 'クリップの長さを確認',
+  'trim.body': 'Live Photo には先頭 3 秒前後が使われます。必要に応じて後で調整できます。',
+  'trim.next': '次へ',
+
+  // Import screen
+  'import.loading': '動画を選んでください…',
+  'import.error': '動画を読み込めませんでした。',
+  'import.back': '戻る',
 } as const;
 
 export type TranslationKey = keyof typeof ja;

@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { t } from '@/i18n';
 import { useEntitlement } from '@/hooks/useEntitlement';
 import { useServices } from '@/services/ServiceContext';
 import { useEntitlementStore } from '@/store/entitlementStore';
@@ -28,16 +29,16 @@ export default function SettingsScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.row}>
-        <Text style={styles.label}>現在のプラン</Text>
+        <Text style={styles.label}>{t('settings.plan_label')}</Text>
         <Text style={styles.value}>{renderEntitlement(entitlement)}</Text>
       </View>
 
       <Pressable style={styles.button} onPress={onRestore}>
-        <Text style={styles.buttonText}>購入を復元</Text>
+        <Text style={styles.buttonText}>{t('settings.restore')}</Text>
       </Pressable>
 
       <Pressable style={styles.button} onPress={() => router.push('/paywall')}>
-        <Text style={styles.buttonText}>高画質解放を購入</Text>
+        <Text style={styles.buttonText}>{t('settings.buy_premium')}</Text>
       </Pressable>
 
       {__DEV__ && (
@@ -46,7 +47,7 @@ export default function SettingsScreen() {
           onPress={() => router.push('/debug')}
           testID="settings-open-debug"
         >
-          <Text style={styles.buttonText}>デバッグ情報を開く</Text>
+          <Text style={styles.buttonText}>{t('settings.debug')}</Text>
         </Pressable>
       )}
     </View>
@@ -56,11 +57,11 @@ export default function SettingsScreen() {
 const renderEntitlement = (e: string): string => {
   switch (e) {
     case 'premiumUnlocked':
-      return '高画質 (買い切り)';
+      return t('settings.plan_premium');
     case 'oneTimeHQTrial':
-      return '高画質 (1回のみ)';
+      return t('settings.plan_trial');
     default:
-      return '標準画質';
+      return t('settings.plan_free');
   }
 };
 

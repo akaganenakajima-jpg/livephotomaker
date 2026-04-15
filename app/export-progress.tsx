@@ -71,7 +71,7 @@ export default function ExportProgressScreen() {
   if (error) {
     return (
       <View style={styles.root}>
-        <Text style={styles.errorTitle}>エラー</Text>
+        <Text style={styles.errorTitle}>{t('error.title')}</Text>
         <Text style={styles.body}>{t(appErrorMessageKey(error) as TranslationKey)}</Text>
       </View>
     );

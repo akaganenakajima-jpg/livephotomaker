@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
+import { t } from '@/i18n';
 import { ServiceProvider } from '@/services/ServiceContext';
 
 /**
@@ -17,16 +18,19 @@ export default function RootLayout() {
           headerTitleStyle: { fontWeight: '600' },
         }}
       >
-        <Stack.Screen name="index" options={{ title: 'Video to Live Photo' }} />
-        <Stack.Screen name="import" options={{ title: '動画を選ぶ' }} />
-        <Stack.Screen name="trim" options={{ title: 'トリム' }} />
-        <Stack.Screen name="export-options" options={{ title: '書き出し方法' }} />
-        <Stack.Screen name="export-progress" options={{ title: '作成中', gestureEnabled: false }} />
-        <Stack.Screen name="live-photo-preview" options={{ title: 'プレビュー' }} />
-        <Stack.Screen name="success-guide" options={{ title: '保存しました' }} />
-        <Stack.Screen name="paywall" options={{ title: '高画質解放', presentation: 'modal' }} />
-        <Stack.Screen name="settings" options={{ title: '設定' }} />
-        <Stack.Screen name="debug" options={{ title: 'デバッグ情報' }} />
+        <Stack.Screen name="index" options={{ title: t('nav.home') }} />
+        <Stack.Screen name="import" options={{ title: t('nav.import') }} />
+        <Stack.Screen name="trim" options={{ title: t('nav.trim') }} />
+        <Stack.Screen name="export-options" options={{ title: t('nav.export_options') }} />
+        <Stack.Screen
+          name="export-progress"
+          options={{ title: t('nav.export_progress'), gestureEnabled: false }}
+        />
+        <Stack.Screen name="live-photo-preview" options={{ title: t('nav.preview') }} />
+        <Stack.Screen name="success-guide" options={{ title: t('nav.success') }} />
+        <Stack.Screen name="paywall" options={{ title: t('nav.paywall'), presentation: 'modal' }} />
+        <Stack.Screen name="settings" options={{ title: t('nav.settings') }} />
+        <Stack.Screen name="debug" options={{ title: t('nav.debug') }} />
       </Stack>
     </ServiceProvider>
   );
