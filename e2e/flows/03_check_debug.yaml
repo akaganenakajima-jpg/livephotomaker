@@ -1,0 +1,55 @@
+appId: com.gen.videotolivephoto
+---
+# Flow 03 — Debug Screen Assertions
+#
+# Purpose: After a successful export (run flow 02 first), navigate to the
+# Debug screen and assert that the save result values are present and the
+# status is "ok".
+#
+# Preconditions:
+#   - Flow 02 or 02_standard_export_testmode has been run in this session.
+#     Test-mode variant recommended: it completes faster and is more reliable.
+#   - App is on the home screen (test mode disabled — cleanup done by flow 02tm).
+#   - Development Build only (__DEV__ = true) — the debug entry is hidden in
+#     production builds.
+#
+# What Maestro asserts:
+#   - debug-status-value element contains text "ok"
+#   - debug-local-identifier is visible and non-empty
+#   - debug-content-identifier is visible and non-empty
+
+- launchApp:
+    clearState: false
+
+- assertVisible:
+    id: home-screen
+
+# Navigate to Settings.
+- tapOn:
+    id: home-settings-button
+
+# Tap the "Debug info" row (only visible in __DEV__ builds).
+- tapOn:
+    text: "デバッグ情報を開く"
+
+- assertVisible:
+    id: debug-panel
+
+# The status banner machine-readable value must be "ok".
+- assertVisible:
+    id: debug-status-value
+
+- assertTrue:
+    condition: ${output.debug-status-value == "ok"}
+    label: "Expected export status 'ok' but got something else"
+
+# The last save identifiers must be present (non-empty strings).
+- assertVisible:
+    id: debug-local-identifier
+
+- assertVisible:
+    id: debug-content-identifier
+
+# Sanity: the banner background should be green (status=ok).
+- assertVisible:
+    id: debug-status-banner

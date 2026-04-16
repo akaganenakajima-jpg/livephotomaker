@@ -78,6 +78,12 @@ export const ja = {
   'import.loading': '動画を選んでください…',
   'import.error': '動画を読み込めませんでした。',
   'import.back': '戻る',
+  'import.test_mode_loading': 'テストモード: 最新の動画を読み込み中…',
+  'import.test_mode_no_video': '写真ライブラリに動画が見つかりません。動画を追加してください。',
+
+  // Test mode (DEV only — never shown in production)
+  'debug.test_mode': 'テストモード',
+  'debug.test_mode.detail': 'フォトピッカーを使わず、ライブラリの最新動画で書き出します',
 } as const;
 
 export type TranslationKey = keyof typeof ja;

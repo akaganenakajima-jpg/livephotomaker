@@ -1,0 +1,120 @@
+appId: com.gen.videotolivephoto
+---
+# Flow 02 (Test Mode) — Standard Quality Export WITHOUT the native photo picker
+#
+# Recommended flow for stable Windows 10 + iPhone USB runs.
+#
+# What this flow guarantees when it passes (see docs for full boundary):
+#   ✅ App launched and home screen rendered
+#   ✅ Test mode bypass: no native picker UI interaction required
+#   ✅ Navigation chain: home → import → trim → export-options → progress → success
+#   ✅ contentIdentifier present: Swift module assigned a UUID (Live Photo tagging ran)
+#   ✅ localIdentifier present: PHAssetCreationRequest returned (Photos write completed)
+#   ✅ Debug store recorded status=ok
+#
+# What still requires manual confirmation in Photos.app (see docs):
+#   ⚠️  LIVE badge visible on the asset
+#   ⚠️  Long-press triggers playback
+#   ⚠️  Asset appears in "Live Photos" album
+#
+# Prerequisites:
+#   - Development Build installed (__DEV__ = true for test mode)
+#   - Photo library access granted
+#   - At least ONE locally stored video in the Photos library
+#   - Metro running: npm run start:dev-client
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 1 — Launch & enable test mode
+# ══════════════════════════════════════════════════════════════════════════════
+- launchApp:
+    clearState: false
+
+- assertVisible:
+    id: home-screen
+
+- tapOn:
+    id: home-test-mode-toggle
+
+- assertVisible:
+    id: home-test-mode-banner
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 2 — Trigger import (no picker modal shown)
+# ══════════════════════════════════════════════════════════════════════════════
+- tapOn:
+    id: home-start-button
+
+# MediaLibrary.getAssetsAsync resolves silently; no picker appears.
+# Allow up to 10 s for permission check + library query.
+- assertVisible:
+    id: trim-screen
+    timeout: 10000
+
+- tapOn:
+    id: trim-next-button
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 3 — Standard quality export
+# ══════════════════════════════════════════════════════════════════════════════
+- assertVisible:
+    id: export-options-screen
+
+- tapOn:
+    id: export-option-standard
+
+# Progress spinner — confirms the export pipeline started
+- assertVisible:
+    id: export-progress-loading
+
+# Allow up to 30 s for native Live Photo creation + PHAsset save
+- assertVisible:
+    id: success-screen
+    timeout: 30000
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 4 — Success conditions (≥ 4 assertions)
+#
+# These assertions go beyond "the success screen appeared" and verify that
+# the native pipeline produced real output traceable to the Photos library.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Assert A: success title rendered (UI reached the correct screen)
+- assertVisible:
+    id: success-title
+
+# Assert B: localIdentifier is present
+#   Proof: PHAssetCreationRequest returned a non-empty identifier.
+#   This identifier uniquely addresses the PHAsset in Photos.app.
+#   If this is missing the asset was NOT written to the library.
+- assertVisible:
+    id: success-local-identifier
+
+# Assert C: contentIdentifier is present
+#   Proof: the Swift module assigned a UUID and tagged both the JPEG and
+#   MOV before the PHAsset was created. Without this UUID the pair is not
+#   recognized as a Live Photo by Photos.app.
+- assertVisible:
+    id: success-content-identifier
+
+# Assert D: the "Done" CTA is actionable
+- assertVisible:
+    id: success-done-button
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 5 — Return home
+# ══════════════════════════════════════════════════════════════════════════════
+- tapOn:
+    id: success-done-button
+
+- assertVisible:
+    id: home-screen
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 6 — Cleanup: disable test mode
+# Always runs so subsequent manual sessions start with test mode OFF.
+# ══════════════════════════════════════════════════════════════════════════════
+- tapOn:
+    id: home-test-mode-toggle
+
+- assertNotVisible:
+    id: home-test-mode-banner

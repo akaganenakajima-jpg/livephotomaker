@@ -48,23 +48,38 @@ export default function ExportOptionsScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} testID="export-options-screen">
       <Text style={styles.title}>{t('export.options.title')}</Text>
 
-      <Pressable style={styles.option} onPress={onStandard}>
+      <Pressable
+        style={styles.option}
+        onPress={onStandard}
+        accessibilityLabel={t('export.options.standard')}
+        testID="export-option-standard"
+      >
         <Text style={styles.optionTitle}>{t('export.options.standard')}</Text>
         <Text style={styles.optionBody}>{t('export.options.standard.detail')}</Text>
       </Pressable>
 
       {shouldShowAds && entitlement === 'freeStandard' ? (
-        <Pressable style={styles.option} onPress={onRewarded}>
+        <Pressable
+          style={styles.option}
+          onPress={onRewarded}
+          accessibilityLabel={t('export.options.rewarded')}
+          testID="export-option-rewarded"
+        >
           <Text style={styles.optionTitle}>{t('export.options.rewarded')}</Text>
           <Text style={styles.optionBody}>{t('export.options.rewarded.detail')}</Text>
         </Pressable>
       ) : null}
 
       {entitlement !== 'premiumUnlocked' ? (
-        <Pressable style={styles.optionPrimary} onPress={onPremium}>
+        <Pressable
+          style={styles.optionPrimary}
+          onPress={onPremium}
+          accessibilityLabel={t('export.options.premium')}
+          testID="export-option-premium"
+        >
           <Text style={styles.optionPrimaryTitle}>{t('export.options.premium')}</Text>
           <Text style={styles.optionPrimaryBody}>{t('export.options.premium.detail')}</Text>
         </Pressable>

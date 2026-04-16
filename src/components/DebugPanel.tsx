@@ -82,8 +82,16 @@ export default function DebugPanel() {
       <Section title="Last Save (success)">
         {lastSaveResult ? (
           <>
-            <KV label="localIdentifier" value={lastSaveResult.localIdentifier} />
-            <KV label="contentIdentifier" value={lastSaveResult.contentIdentifier} />
+            <KV
+              label="localIdentifier"
+              value={lastSaveResult.localIdentifier}
+              valueTestID="debug-local-identifier"
+            />
+            <KV
+              label="contentIdentifier"
+              value={lastSaveResult.contentIdentifier}
+              valueTestID="debug-content-identifier"
+            />
             <KV label="at" value={formatTime(lastSaveResult.at)} />
             <KV label="relative" value={formatRelative(lastSaveResult.at)} />
           </>
@@ -163,6 +171,46 @@ const StatusBanner: React.FC<{
       <Text style={styles.bannerSub} selectable>
         {sub}
       </Text>
+      {/* ── Machine-readable values for Maestro assertions ──────────────────
+          All three elements use height:0 / transparent so they are invisible
+          to users but remain in the iOS accessibility tree. Maestro queries
+          them via `assertVisible: {id: "..."}`.
+
+          debug-status-value   : "ok" | "fail" | "idle"
+          debug-asset-saved    : "true" | "false"  — was a PHAsset written?
+          debug-last-success-at: ISO 8601 timestamp of last success, or ""
+          debug-no-error       : "true" | "false"  — is lastError currently null?
+                                 ("true" for both 'ok' and 'idle', "false" for 'fail')
+      ─────────────────────────────────────────────────────────────────────── */}
+      <Text style={styles.statusValue} testID="debug-status-value" accessibilityLabel={status}>
+        {status}
+      </Text>
+      <Text
+        style={styles.statusValue}
+        testID="debug-asset-saved"
+        accessibilityLabel={successAt !== null ? 'true' : 'false'}
+      >
+        {successAt !== null ? 'true' : 'false'}
+      </Text>
+      <Text
+        style={styles.statusValue}
+        testID="debug-last-success-at"
+        accessibilityLabel={successAt !== null ? new Date(successAt).toISOString() : ''}
+      >
+        {successAt !== null ? new Date(successAt).toISOString() : ''}
+      </Text>
+      {/* debug-no-error: affirmative assertion that no error is currently recorded.
+          "true"  — status is 'ok' or 'idle' (lastError === null)
+          "false" — status is 'fail'  (lastError !== null)
+          Allows Maestro / 03_check_debug to assert "no error occurred" as a
+          positive condition rather than relying on absence of a 'fail' value. */}
+      <Text
+        style={styles.statusValue}
+        testID="debug-no-error"
+        accessibilityLabel={status !== 'fail' ? 'true' : 'false'}
+      >
+        {status !== 'fail' ? 'true' : 'false'}
+      </Text>
     </View>
   );
 };
@@ -174,10 +222,14 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
   </View>
 );
 
-const KV: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+const KV: React.FC<{ label: string; value: string; valueTestID?: string }> = ({
+  label,
+  value,
+  valueTestID,
+}) => (
   <View style={styles.kvRow}>
     <Text style={styles.kvLabel}>{label}</Text>
-    <Text style={styles.kvValue} selectable>
+    <Text style={styles.kvValue} selectable testID={valueTestID}>
       {value}
     </Text>
   </View>
@@ -227,6 +279,9 @@ const styles = StyleSheet.create({
   bannerIdle: { backgroundColor: '#8E8E93' },
   bannerTitle: { fontSize: 17, fontWeight: '700', color: '#fff' },
   bannerSub: { fontSize: 13, color: '#fff' },
+  // Visually hidden but accessible to Maestro via testID. Zero height keeps
+  // it out of the visual layout while remaining in the accessibility tree.
+  statusValue: { fontSize: 0, color: 'transparent', height: 0 },
 
   section: {
     backgroundColor: '#fff',

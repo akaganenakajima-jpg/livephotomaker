@@ -80,4 +80,10 @@ export const en: Record<TranslationKey, string> = {
   'import.loading': 'Selecting a video…',
   'import.error': 'Failed to load video.',
   'import.back': 'Back',
+  'import.test_mode_loading': 'Test mode: loading latest video…',
+  'import.test_mode_no_video': 'No video found in photo library. Add a video and retry.',
+
+  // Test mode (DEV only — never shown in production)
+  'debug.test_mode': 'Test Mode',
+  'debug.test_mode.detail': 'Uses the most recent library video instead of the photo picker',
 };

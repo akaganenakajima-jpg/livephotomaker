@@ -16,10 +16,14 @@ import { useDebugInfoStore } from '@/store/debugInfoStore';
 import { logger } from '@/utils/logger';
 
 export interface NativeExportInput {
-  /** File URL of the trimmed MOV clip. */
+  /** File URL of the source MOV clip. */
   readonly movUri: string;
   /** File URL of the extracted still image (JPEG/HEIC). */
   readonly stillUri: string;
+  /** Trim start in seconds (default 0). */
+  readonly startSeconds?: number;
+  /** Trim end in seconds. Native side clamps to actual duration. */
+  readonly endSeconds?: number;
 }
 
 export interface NativeExportResult {

@@ -3,7 +3,6 @@ import * as FileSystem from 'expo-file-system';
 import { Video } from 'expo-av';
 import type { ExportQuality } from '@/types/ExportQuality';
 import { qualityProfile } from '@/types/ExportQuality';
-import type { AppError } from '@/types/AppError';
 import { logger } from '@/utils/logger';
 
 export interface PreparedVideo {
@@ -44,8 +43,8 @@ export const createVideoProcessingService = (): VideoProcessingService => ({
     return ms / 1000;
   },
 
-  prepare: async ({ sourceUri, quality, startSeconds }) => {
-    logger.debug('video.prepare', { sourceUri, quality });
+  prepare: async ({ sourceUri, quality, startSeconds, endSeconds }) => {
+    logger.debug('video.prepare', { sourceUri, quality, startSeconds, endSeconds });
     const profile = qualityProfile(quality);
 
     // Step 1: extract a keyframe still at startSeconds.
@@ -54,31 +53,15 @@ export const createVideoProcessingService = (): VideoProcessingService => ({
       quality: profile.jpegCompression,
     });
 
-    // Step 2: the MOV is passed as-is to the native module, which owns the
-    // trimming + metadata tagging. For the pure-JS happy path we simply copy
-    // the source to a working file.
+    // Step 2: copy the source MOV to a working file.
+    // The native module receives startSeconds/endSeconds and applies the
+    // trim via AVAssetReader.timeRange — no re-encoding, just passthrough
+    // within the specified range. This keeps the JS layer simple.
     const workingDir = `${FileSystem.cacheDirectory}livephoto-${Date.now()}/`;
     await FileSystem.makeDirectoryAsync(workingDir, { intermediates: true });
     const movUri = `${workingDir}source.mov`;
     await FileSystem.copyAsync({ from: sourceUri, to: movUri });
 
-    // Probe duration for UI display.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const probe = await (
-      Video as unknown as {
-        createAsync?: (source: { uri: string }) => Promise<{ durationMillis?: number }>;
-      }
-    ).createAsync?.({ uri: movUri });
-    const durationSeconds = (probe?.durationMillis ?? 0) / 1000;
-
-    if (durationSeconds > MAX_ACCEPTED_DURATION_SECONDS) {
-      const err: AppError = {
-        kind: 'videoTooLong',
-        maxSeconds: MAX_ACCEPTED_DURATION_SECONDS,
-      };
-      throw err;
-    }
-
-    return { movUri, stillUri, durationSeconds };
+    return { movUri, stillUri, durationSeconds: endSeconds - startSeconds };
   },
 });

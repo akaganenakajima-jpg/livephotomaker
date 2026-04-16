@@ -1,0 +1,83 @@
+appId: com.gen.videotolivephoto
+---
+# Flow 02 — Standard Quality Export (full happy path)
+#
+# Preconditions:
+#   - Photo library access already granted (run flow once manually first)
+#   - At least one VIDEO exists in the device Photos library.
+#     Easiest: AirDrop a short MP4 from PC, or use Photos app to import one.
+#   - Metro server running on Windows PC: npm run start:dev-client
+#   - Device connected to same Wi-Fi as the PC (or USB + mitmproxy bridge)
+#
+# Steps automated:
+#   1. Launch app
+#   2. Tap "Choose a video" → native iOS photo picker opens
+#   3. Tap the first video in the picker (assumes at least one exists)
+#   4. Trim screen — tap "Next" to proceed without trimming
+#   5. Export-options screen — choose Standard quality
+#   6. Wait for the progress spinner to disappear (save in progress)
+#   7. Assert success-guide screen is shown
+#
+# Manual follow-up (NOT automated — see docs/manual-test-checklist.md):
+#   - Open Photos app and verify the Live Photo badge appears.
+
+- launchApp:
+    clearState: false
+
+- assertVisible:
+    id: home-screen
+
+- tapOn:
+    id: home-start-button
+
+# The app navigates to /import which immediately launches the native picker.
+# Wait up to 10 s for the iOS "Photos" sheet to appear.
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# Tap the first video cell in the native picker.
+# The system picker shows a "Videos" tab on iOS 17+. If photos and videos are
+# mixed, this assertion picks whatever is first. For a deterministic run, put
+# exactly one video in the library before executing this flow.
+- tapOn:
+    text: "Videos"
+    optional: true     # present on iOS 17+; skip gracefully on older
+
+- tapOn:
+    index: 0           # first item in the grid
+
+# After the picker dismisses, the app routes to /trim.
+- assertVisible:
+    id: trim-screen
+
+- tapOn:
+    id: trim-next-button
+
+# Export-options screen.
+- assertVisible:
+    id: export-options-screen
+
+- tapOn:
+    id: export-option-standard
+
+# Export progress — spinner should appear briefly.
+- assertVisible:
+    id: export-progress-loading
+
+# Wait up to 30 s for the export to complete and the success screen to appear.
+- assertVisible:
+    id: success-screen
+    timeout: 30000
+
+- assertVisible:
+    id: success-title
+
+- assertVisible:
+    id: success-done-button
+
+# Return home so subsequent flows start from a clean state.
+- tapOn:
+    id: success-done-button
+
+- assertVisible:
+    id: home-screen

@@ -13,9 +13,15 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@/app/*": ["app/*"],
-      "@/modules/*": ["modules/*"]
+      "@/*": [
+        "src/*"
+      ],
+      "@/app/*": [
+        "app/*"
+      ],
+      "@/modules/*": [
+        "modules/*"
+      ]
     }
   },
   "include": [
@@ -25,7 +31,9 @@
     "modules/**/*.tsx",
     "__tests__/**/*",
     "*.ts",
-    "*.tsx"
+    "*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
   ],
   "exclude": [
     "node_modules",

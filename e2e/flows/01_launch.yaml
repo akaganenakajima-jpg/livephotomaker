@@ -1,0 +1,24 @@
+appId: com.gen.videotolivephoto
+---
+# Flow 01 — App Launch
+# Verifies that the app starts and the home screen is fully rendered.
+# Runtime: ~5 s
+# Precondition: Development Build installed on device via EAS (ad-hoc).
+
+- launchApp:
+    clearState: false   # keep photo library permission already granted
+
+- assertVisible:
+    id: home-screen
+
+- assertVisible:
+    id: home-title
+
+- assertVisible:
+    id: home-subtitle
+
+- assertVisible:
+    id: home-start-button
+
+- assertVisible:
+    id: home-settings-button

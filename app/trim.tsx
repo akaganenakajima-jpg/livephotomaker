@@ -13,7 +13,7 @@ export default function TrimScreen() {
   const { videoUri } = useLocalSearchParams<{ videoUri: string }>();
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} testID="trim-screen">
       <Text style={styles.title}>{t('trim.title')}</Text>
       <Text style={styles.body}>{t('trim.body')}</Text>
       <Pressable
@@ -24,6 +24,8 @@ export default function TrimScreen() {
             params: { videoUri },
           })
         }
+        accessibilityLabel={t('trim.next')}
+        testID="trim-next-button"
       >
         <Text style={styles.primaryText}>{t('trim.next')}</Text>
       </Pressable>

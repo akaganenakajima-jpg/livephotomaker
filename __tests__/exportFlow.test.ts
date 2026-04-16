@@ -17,12 +17,14 @@ describe('LivePhotoExportService (happy path)', () => {
     const bridge = createMockNativeLivePhotoBridge();
     const service = createLivePhotoExportService(bridge);
 
-    const result = await service.saveFromPrepared(preparedFixture);
+    const result = await service.saveFromPrepared(preparedFixture, 0, 3);
 
     expect(bridge.calls).toHaveLength(1);
-    expect(bridge.calls[0]).toEqual({
+    expect(bridge.calls[0]).toMatchObject({
       movUri: preparedFixture.movUri,
       stillUri: preparedFixture.stillUri,
+      startSeconds: 0,
+      endSeconds: 3,
     });
     expect(result.localIdentifier).toBe('mock-asset-id');
   });
@@ -31,7 +33,7 @@ describe('LivePhotoExportService (happy path)', () => {
     const bridge = createMockNativeLivePhotoBridge({ throwKind: 'exportFailed' });
     const service = createLivePhotoExportService(bridge);
 
-    await expect(service.saveFromPrepared(preparedFixture)).rejects.toMatchObject({
+    await expect(service.saveFromPrepared(preparedFixture, 0, 3)).rejects.toMatchObject({
       kind: 'exportFailed',
     });
   });

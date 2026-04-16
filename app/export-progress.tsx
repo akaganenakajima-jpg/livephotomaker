@@ -44,7 +44,7 @@ export default function ExportProgressScreen() {
         if (quality === 'high') {
           analytics.track('export_hq_started');
         }
-        await livePhotoExport.saveFromPrepared(prepared);
+        await livePhotoExport.saveFromPrepared(prepared, 0, 3);
         if (cancelled) return;
         consumeTrial();
         analytics.track('export_completed', { quality });
@@ -70,16 +70,18 @@ export default function ExportProgressScreen() {
 
   if (error) {
     return (
-      <View style={styles.root}>
-        <Text style={styles.errorTitle}>{t('error.title')}</Text>
-        <Text style={styles.body}>{t(appErrorMessageKey(error) as TranslationKey)}</Text>
+      <View style={styles.root} testID="export-progress-error">
+        <Text style={styles.errorTitle} testID="export-error-title">{t('error.title')}</Text>
+        <Text style={styles.body} testID="export-error-message">
+          {t(appErrorMessageKey(error) as TranslationKey)}
+        </Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.root}>
-      <ActivityIndicator size="large" />
+    <View style={styles.root} testID="export-progress-loading">
+      <ActivityIndicator size="large" testID="export-progress-spinner" />
       <Text style={styles.title}>{t('export.progress.title')}</Text>
       <Text style={styles.body}>{t('export.progress.hint')}</Text>
     </View>

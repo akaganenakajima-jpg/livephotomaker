@@ -64,11 +64,15 @@ public class ExpoLivePhotoExporterModule: Module {
     AsyncFunction("saveLivePhotoToLibrary") { (params: SaveParams, promise: Promise) in
       let movUri   = params.movUri
       let stillUri = params.stillUri
+      let startSeconds = params.startSeconds
+      let endSeconds   = params.endSeconds
       Task {
         do {
           let result = try await LivePhotoExportPipeline.performSave(
             movUri: movUri,
-            stillUri: stillUri
+            stillUri: stillUri,
+            startSeconds: startSeconds,
+            endSeconds: endSeconds
           )
           promise.resolve([
             "localIdentifier": result.localIdentifier,
@@ -90,6 +94,10 @@ public class ExpoLivePhotoExporterModule: Module {
   struct SaveParams: Record {
     @Field var movUri: String = ""
     @Field var stillUri: String = ""
+    /// Trim start in seconds (default 0).
+    @Field var startSeconds: Double = 0.0
+    /// Trim end in seconds. Clamped to asset duration on the native side.
+    @Field var endSeconds: Double = 3.0
   }
 }
 
@@ -119,14 +127,19 @@ enum LivePhotoExportPipeline {
   //       (値は int8 で 0、timeRange は極短区間)
   //   (D) PHAssetCreationRequest.forAsset() に .photo と .pairedVideo の両リソースを
   //       同一 request で add する (別々の request に分けると単なる 2 資産になる)
-  static func performSave(movUri: String, stillUri: String) async throws -> LivePhotoSaveResult {
+  static func performSave(
+    movUri: String,
+    stillUri: String,
+    startSeconds: Double = 0.0,
+    endSeconds: Double = 3.0
+  ) async throws -> LivePhotoSaveResult {
     guard let movURL = fileURL(from: movUri),
           let stillURL = fileURL(from: stillUri) else {
       devLog("invalid source uris mov=\(movUri) still=\(stillUri)")
       throw LivePhotoExporterError.invalidSourceUri
     }
 
-    devLog("performSave start mov=\(movURL.lastPathComponent) still=\(stillURL.lastPathComponent)")
+    devLog("performSave start mov=\(movURL.lastPathComponent) still=\(stillURL.lastPathComponent) trim=[\(startSeconds), \(endSeconds)]s")
 
     try await ensurePhotoPermission()
 
@@ -136,7 +149,12 @@ enum LivePhotoExportPipeline {
     let taggedStillURL = try writeTaggedStill(source: stillURL, contentIdentifier: contentIdentifier)
     devLog("tagged still written -> \(taggedStillURL.lastPathComponent)")
 
-    let taggedMovURL = try await writeTaggedMovie(source: movURL, contentIdentifier: contentIdentifier)
+    let taggedMovURL = try await writeTaggedMovie(
+      source: movURL,
+      contentIdentifier: contentIdentifier,
+      startSeconds: startSeconds,
+      endSeconds: endSeconds
+    )
     devLog("tagged movie written -> \(taggedMovURL.lastPathComponent)")
 
     let localIdentifier = try await createLivePhotoAsset(photoURL: taggedStillURL, videoURL: taggedMovURL)
@@ -228,7 +246,12 @@ enum LivePhotoExportPipeline {
   //
   // 既存 MOV を直接 mutate するのではなく、一時ディレクトリへ新しいファイルを
   // 書き出し、そのパスを返す。
-  static func writeTaggedMovie(source: URL, contentIdentifier: String) async throws -> URL {
+  static func writeTaggedMovie(
+    source: URL,
+    contentIdentifier: String,
+    startSeconds: Double = 0.0,
+    endSeconds: Double = 3.0
+  ) async throws -> URL {
     let asset = AVURLAsset(url: source)
     let destURL = temporaryURL(extension: "mov")
 
@@ -236,6 +259,14 @@ enum LivePhotoExportPipeline {
       devLog("AVAssetReader init failed")
       throw LivePhotoExporterError.movieReaderCreateFailed
     }
+
+    // Apply trim range so the reader only processes the requested segment.
+    // CMTime seconds values are clamped to [0, actual duration] by AVFoundation.
+    let startTime = CMTime(seconds: max(0, startSeconds), preferredTimescale: 600)
+    let endTime   = CMTime(seconds: max(startSeconds + 0.1, endSeconds), preferredTimescale: 600)
+    reader.timeRange = CMTimeRange(start: startTime, end: endTime)
+    devLog("reader.timeRange = [\(startSeconds), \(endSeconds)]s")
+
     guard let writer = try? AVAssetWriter(outputURL: destURL, fileType: .mov) else {
       devLog("AVAssetWriter init failed")
       throw LivePhotoExporterError.movieWriterCreateFailed
