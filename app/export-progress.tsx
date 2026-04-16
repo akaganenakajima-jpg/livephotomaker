@@ -34,17 +34,27 @@ export default function ExportProgressScreen() {
     let cancelled = false;
     const run = async () => {
       try {
+        logger.info('[progress] step1: ensurePhotoPermission');
         await ensurePhotoPermission(photoLibrary);
+        logger.info('[progress] step2: videoProcessing.prepare', { videoUri });
         const prepared = await videoProcessing.prepare({
           sourceUri: videoUri,
           quality,
           startSeconds: 0,
           endSeconds: 3,
         });
+        logger.info('[progress] step3: saveFromPrepared', { movUri: prepared.movUri, stillUri: prepared.stillUri });
         if (quality === 'high') {
           analytics.track('export_hq_started');
         }
-        await livePhotoExport.saveFromPrepared(prepared, 0, 3);
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => {
+            logger.warn('[progress] saveFromPrepared timed out after 45s');
+            reject({ kind: 'exportFailed', underlying: 'ERR_TIMEOUT: native call did not return within 45s' });
+          }, 45000),
+        );
+        await Promise.race([livePhotoExport.saveFromPrepared(prepared, 0, 3), timeout]);
+        logger.info('[progress] step4: saveFromPrepared done');
         if (cancelled) return;
         consumeTrial();
         analytics.track('export_completed', { quality });

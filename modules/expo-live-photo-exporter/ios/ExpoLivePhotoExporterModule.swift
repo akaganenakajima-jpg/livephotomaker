@@ -337,7 +337,11 @@ enum LivePhotoExportPipeline {
       devLog("writer.startWriting failed: \(writer.error?.localizedDescription ?? "nil")")
       throw LivePhotoExporterError.movieStartWritingFailed
     }
-    reader.startReading()
+    guard reader.startReading() else {
+      devLog("reader.startReading failed: \(reader.error?.localizedDescription ?? "nil") status=\(reader.status.rawValue)")
+      throw LivePhotoExporterError.movieReaderCreateFailed
+    }
+    devLog("reader.startReading ok, beginning session")
     writer.startSession(atSourceTime: .zero)
 
     // (C) still-image-time を 1 サンプルだけ差し込む。Apple のサンプル実装に倣い
@@ -351,15 +355,21 @@ enum LivePhotoExportPipeline {
     metadataAdaptor.assetWriterInput.markAsFinished()
     devLog("still-image-time metadata appended")
 
+    devLog("pump video start")
     try await pump(input: videoInput, from: videoOutput, label: "video")
+    devLog("pump video done")
     videoInput.markAsFinished()
 
     if let aIn = audioInput, let aOut = audioOutput {
+      devLog("pump audio start")
       try await pump(input: aIn, from: aOut, label: "audio")
+      devLog("pump audio done")
       aIn.markAsFinished()
     }
 
+    devLog("writer.finishWriting start")
     await writer.finishWriting()
+    devLog("writer.finishWriting done status=\(writer.status.rawValue)")
     if writer.status != .completed {
       devLog("writer finish status=\(writer.status.rawValue) error=\(writer.error?.localizedDescription ?? "nil")")
       throw LivePhotoExporterError.movieFinishWritingFailed
