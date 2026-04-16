@@ -356,13 +356,13 @@ enum LivePhotoExportPipeline {
     devLog("still-image-time metadata appended")
 
     devLog("pump video start")
-    try await pump(input: videoInput, from: videoOutput, label: "video")
+    try await pump(input: videoInput, from: videoOutput, reader: reader, writer: writer, label: "video")
     devLog("pump video done")
     videoInput.markAsFinished()
 
     if let aIn = audioInput, let aOut = audioOutput {
       devLog("pump audio start")
-      try await pump(input: aIn, from: aOut, label: "audio")
+      try await pump(input: aIn, from: aOut, reader: reader, writer: writer, label: "audio")
       devLog("pump audio done")
       aIn.markAsFinished()
     }
@@ -381,25 +381,42 @@ enum LivePhotoExportPipeline {
   //
   // Drains sample buffers from a reader output into a writer input.
   //
-  // `requestMediaDataWhenReady` may invoke its block multiple times until
-  // `markAsFinished()` is called. We use a completion handler bridge instead
-  // of `withCheckedContinuation` to avoid the @Sendable capture constraints
-  // that withCheckedContinuation imposes in strict concurrency mode.
+  // Design notes:
+  //   - `requestMediaDataWhenReady` calls the block whenever the writer input
+  //     is ready to accept more data. The block runs until it signals `semaphore`
+  //     (end-of-stream, append failure, or writer failure).
+  //   - We use DispatchSemaphore + semaphore.wait(timeout:) instead of a bare
+  //     semaphore.wait() so a broken writer (isReadyForMoreMediaData stuck false)
+  //     does NOT hang indefinitely.
+  //   - On timeout the error message includes reader/writer status codes so
+  //     Windows-only developers can read them via the in-app Debug screen
+  //     (NativeLivePhotoBridge.ts puts them into lastError.message).
   //
-  // The DispatchSemaphore approach ensures we wait for the pump to complete
-  // without bridging non-Sendable AVFoundation types across @Sendable closures.
+  // `reader` and `writer` are passed so the block can bail out immediately
+  // when the writer enters a terminal state rather than looping on
+  // isReadyForMoreMediaData forever.
+  private static let pumpTimeoutSeconds: Double = 20
+
   static func pump(
     input: AVAssetWriterInput,
     from output: AVAssetReaderTrackOutput,
+    reader: AVAssetReader,
+    writer: AVAssetWriter,
     label: String
   ) async throws {
-    // Bridge the callback-based API to async/await using a semaphore.
-    // Both input and output are used only on the dedicated DispatchQueue —
-    // no cross-thread sharing occurs.
     let semaphore = DispatchSemaphore(value: 0)
-    let queue = DispatchQueue(label: "live-photo-exporter.pump.\(label).\(UUID().uuidString)")
-    input.requestMediaDataWhenReady(on: queue) {
+    let pumpQueue = DispatchQueue(label: "lp-pump-\(label)-\(UUID().uuidString)", qos: .userInitiated)
+
+    input.requestMediaDataWhenReady(on: pumpQueue) {
       while input.isReadyForMoreMediaData {
+        // Bail out immediately if the writer has entered a terminal state.
+        // Without this check, isReadyForMoreMediaData stays false forever when
+        // the writer fails, causing the semaphore to never be signalled.
+        if writer.status == .failed || writer.status == .cancelled {
+          devLog("pump(\(label)) writer terminal status=\(writer.status.rawValue) err=\(writer.error?.localizedDescription ?? "nil")")
+          semaphore.signal()
+          return
+        }
         if let buffer = output.copyNextSampleBuffer() {
           if !input.append(buffer) {
             devLog("pump(\(label)) append failed")
@@ -407,19 +424,52 @@ enum LivePhotoExportPipeline {
             return
           }
         } else {
+          devLog("pump(\(label)) end-of-stream reader.status=\(reader.status.rawValue)")
           semaphore.signal()
           return
         }
       }
+      // isReadyForMoreMediaData became false → requestMediaDataWhenReady will
+      // call this block again when the writer is ready for more data.
     }
-    // Block the current thread (inside a detached Task / cooperative pool
-    // thread) until the pump completes. The pump queue and this thread are
-    // different, so there is no deadlock risk.
-    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+
+    // Wait with a hard timeout so a permanently-stuck writer cannot hang
+    // the entire export pipeline forever.
+    let timedOut = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
       DispatchQueue.global().async {
-        semaphore.wait()
-        continuation.resume()
+        let result = semaphore.wait(timeout: .now() + pumpTimeoutSeconds)
+        cont.resume(returning: result == .timedOut)
       }
+    }
+
+    if timedOut {
+      let rs = reader.status.rawValue
+      let ws = writer.status.rawValue
+      let we = writer.error?.localizedDescription ?? "nil"
+      // Embed rs/ws into the message so it surfaces in the in-app Debug screen
+      // (lastError.message) — the only Swift diagnostic visible on Windows.
+      let msg = "pump_\(label)_timeout rs=\(rs) ws=\(ws) we=\(we)"
+      devLog("PUMP TIMEOUT: \(msg)")
+      throw NSError(
+        domain: "com.gen.videotolivephoto",
+        code: Int(rs * 10 + ws),
+        userInfo: [NSLocalizedDescriptionKey: msg]
+      )
+    }
+
+    // Post-pump: surface any silent reader/writer failures that occurred
+    // after the semaphore was signalled (e.g. writer failed on the last write).
+    if reader.status == .failed {
+      let msg = "pump_\(label)_reader_failed: \(reader.error?.localizedDescription ?? "nil")"
+      devLog(msg)
+      throw NSError(domain: "com.gen.videotolivephoto", code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: msg])
+    }
+    if writer.status == .failed {
+      let msg = "pump_\(label)_writer_failed: \(writer.error?.localizedDescription ?? "nil")"
+      devLog(msg)
+      throw NSError(domain: "com.gen.videotolivephoto", code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: msg])
     }
   }
 
