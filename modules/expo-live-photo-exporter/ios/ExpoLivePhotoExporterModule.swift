@@ -181,12 +181,37 @@ enum LivePhotoExportPipeline {
 
   // MARK: - URI helpers
 
+  // Parses a URI string into a filesystem URL.
+  //
+  // Handles three input shapes:
+  //   1. `file:///path/to/file.mov`              → URL(fileURLWithPath:)
+  //   2. `/absolute/path/to/file.mov`            → URL(fileURLWithPath:)
+  //   3. `file:///path/to/file.mp4#test`         → fragment stripped, then (1)
+  //
+  // Case 3 happens when test-mode / dev fixtures pass URIs with an anchor to
+  // tag the origin. AVFoundation rejects URLs with fragments, so we must strip
+  // them before handing to AVURLAsset.
   static func fileURL(from uri: String) -> URL? {
     if uri.isEmpty { return nil }
-    if uri.hasPrefix("file://") {
-      return URL(string: uri)
+
+    // Strip fragment (#...) and query (?...) — AVFoundation rejects them.
+    var clean = uri
+    if let hashIdx = clean.firstIndex(of: "#") {
+      clean = String(clean[..<hashIdx])
     }
-    return URL(fileURLWithPath: uri)
+    if let queryIdx = clean.firstIndex(of: "?") {
+      clean = String(clean[..<queryIdx])
+    }
+    if clean.isEmpty { return nil }
+
+    if clean.hasPrefix("file://") {
+      // Parse through URL(string:) so percent-encoded path segments decode.
+      if let url = URL(string: clean) {
+        return URL(fileURLWithPath: url.path)
+      }
+      return nil
+    }
+    return URL(fileURLWithPath: clean)
   }
 
   static func temporaryURL(extension ext: String) -> URL {
@@ -238,14 +263,25 @@ enum LivePhotoExportPipeline {
 
   // MARK: - Movie (MOV) tagging — 条件 (B)(C)
   //
-  // passthrough reader/writer を組んで、元のビデオ/音声トラックを再圧縮せずに
-  // コピーしつつ以下を差し込む:
+  // Re-encoding pipeline (H.264). Abandoned passthrough (`outputSettings: nil`)
+  // because it required a `sourceFormatHint` that we were not providing — the
+  // writer input ended up stuck in "not ready" state and the pump callback was
+  // never invoked, producing rs=1 ws=1 we=nil timeouts on Windows dev builds.
   //
-  //   - top-level: writer.metadata に mdta/content.identifier (条件 B)
-  //   - metadata track: mdta/still-image-time を 1 サンプル (条件 C)
+  // Pipeline:
+  //   reader: HEVC/H.264 source → decoded BGRA pixel buffers
+  //   writer: BGRA → H.264 encoded MOV (6 Mbps) + Live Photo metadata
   //
-  // 既存 MOV を直接 mutate するのではなく、一時ディレクトリへ新しいファイルを
-  // 書き出し、そのパスを返す。
+  // Why this is safe:
+  //   - Explicit AVVideoCompressionProperties → writer always knows format
+  //     up-front, so `isReadyForMoreMediaData` flips true immediately.
+  //   - No seek (no reader.timeRange). Trim is enforced by PTS in the pump.
+  //   - Audio is dropped — Live Photos are silent on Apple hardware when
+  //     rendered as wallpapers, and dropping audio removes a whole class of
+  //     failure modes (audio codec mismatch, audio pump starvation).
+  //   - DispatchSemaphore is gone. The pump is a
+  //     `withCheckedThrowingContinuation` that resumes exactly once from the
+  //     `requestMediaDataWhenReady` callback.
   static func writeTaggedMovie(
     source: URL,
     contentIdentifier: String,
@@ -255,27 +291,7 @@ enum LivePhotoExportPipeline {
     let asset = AVURLAsset(url: source)
     let destURL = temporaryURL(extension: "mov")
 
-    guard let reader = try? AVAssetReader(asset: asset) else {
-      devLog("AVAssetReader init failed")
-      throw LivePhotoExporterError.movieReaderCreateFailed
-    }
-
-    // PTS-based trimming: read from the beginning of the file (no seek) and
-    // stop inside pump() once elapsed PTS >= clipDuration. This avoids the
-    // 20+ second block that reader.timeRange causes when seeking in a compressed
-    // HEVC stream using passthrough (outputSettings: nil).
-    let clipDuration = max(0.1, endSeconds - startSeconds)
-    devLog("clip target: \(clipDuration)s (enforced via PTS in pump — no reader.timeRange seek)")
-
-    guard let writer = try? AVAssetWriter(outputURL: destURL, fileType: .mov) else {
-      devLog("AVAssetWriter init failed")
-      throw LivePhotoExporterError.movieWriterCreateFailed
-    }
-
-    // (B) top-level content identifier
-    writer.metadata = [makeContentIdentifierItem(contentIdentifier)]
-
-    // --- video track (passthrough) ---
+    // ---- Load video track + properties ----
     let videoTracks: [AVAssetTrack]
     do {
       videoTracks = try await asset.loadTracks(withMediaType: .video)
@@ -288,7 +304,25 @@ enum LivePhotoExportPipeline {
       throw LivePhotoExporterError.movieVideoTrackMissing
     }
 
-    let videoOutput = AVAssetReaderTrackOutput(track: sourceVideoTrack, outputSettings: nil)
+    let naturalSize = (try? await sourceVideoTrack.load(.naturalSize)) ?? CGSize(width: 1080, height: 1920)
+    let transform   = (try? await sourceVideoTrack.load(.preferredTransform)) ?? .identity
+    devLog("source video naturalSize=\(naturalSize) transform=\(transform)")
+
+    // ---- Reader (HEVC/H.264 → BGRA) ----
+    guard let reader = try? AVAssetReader(asset: asset) else {
+      devLog("AVAssetReader init failed")
+      throw LivePhotoExporterError.movieReaderCreateFailed
+    }
+
+    let clipDuration = max(0.1, endSeconds - startSeconds)
+    devLog("clip target: \(clipDuration)s (PTS-based trim, re-encode to H.264)")
+
+    // Decode settings: BGRA (widely supported by VideoToolbox encoder).
+    let readerVideoSettings: [String: Any] = [
+      kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
+      kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+    ]
+    let videoOutput = AVAssetReaderTrackOutput(track: sourceVideoTrack, outputSettings: readerVideoSettings)
     videoOutput.alwaysCopiesSampleData = false
     guard reader.canAdd(videoOutput) else {
       devLog("reader cannot add video output")
@@ -296,34 +330,34 @@ enum LivePhotoExportPipeline {
     }
     reader.add(videoOutput)
 
-    let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: nil)
-    videoInput.expectsMediaDataInRealTime = false
-    if let transform = try? await sourceVideoTrack.load(.preferredTransform) {
-      videoInput.transform = transform
+    // ---- Writer ----
+    guard let writer = try? AVAssetWriter(outputURL: destURL, fileType: .mov) else {
+      devLog("AVAssetWriter init failed")
+      throw LivePhotoExporterError.movieWriterCreateFailed
     }
+    writer.shouldOptimizeForNetworkUse = true
+    // (B) top-level content identifier
+    writer.metadata = [makeContentIdentifierItem(contentIdentifier)]
+
+    // Encode settings: H.264 @ 6 Mbps, same resolution as source.
+    let writerVideoSettings: [String: Any] = [
+      AVVideoCodecKey: AVVideoCodecType.h264,
+      AVVideoWidthKey: Int(abs(naturalSize.width)),
+      AVVideoHeightKey: Int(abs(naturalSize.height)),
+      AVVideoCompressionPropertiesKey: [
+        AVVideoAverageBitRateKey: 6_000_000,
+        AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
+        AVVideoMaxKeyFrameIntervalKey: 30,
+      ] as [String: Any],
+    ]
+    let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: writerVideoSettings)
+    videoInput.expectsMediaDataInRealTime = false
+    videoInput.transform = transform
     guard writer.canAdd(videoInput) else {
       devLog("writer cannot add video input")
       throw LivePhotoExporterError.movieWriterCreateFailed
     }
     writer.add(videoInput)
-
-    // --- audio track (optional passthrough) ---
-    var audioInput: AVAssetWriterInput? = nil
-    var audioOutput: AVAssetReaderTrackOutput? = nil
-    if let sourceAudioTrack = try? await asset.loadTracks(withMediaType: .audio).first {
-      let out = AVAssetReaderTrackOutput(track: sourceAudioTrack, outputSettings: nil)
-      out.alwaysCopiesSampleData = false
-      let inp = AVAssetWriterInput(mediaType: .audio, outputSettings: nil)
-      inp.expectsMediaDataInRealTime = false
-      if reader.canAdd(out) && writer.canAdd(inp) {
-        reader.add(out)
-        writer.add(inp)
-        audioInput = inp
-        audioOutput = out
-      } else {
-        devLog("audio passthrough skipped (canAdd returned false)")
-      }
-    }
 
     // (C) metadata track: still-image-time
     let metadataAdaptor = makeStillImageTimeMetadataAdaptor()
@@ -333,6 +367,7 @@ enum LivePhotoExportPipeline {
     }
     writer.add(metadataAdaptor.assetWriterInput)
 
+    // ---- Start ----
     guard writer.startWriting() else {
       devLog("writer.startWriting failed: \(writer.error?.localizedDescription ?? "nil")")
       throw LivePhotoExporterError.movieStartWritingFailed
@@ -344,29 +379,31 @@ enum LivePhotoExportPipeline {
     devLog("reader.startReading ok, beginning session")
     writer.startSession(atSourceTime: .zero)
 
-    // (C) still-image-time を 1 サンプルだけ差し込む。Apple のサンプル実装に倣い
-    // 値 0 / duration 1/30 秒の短い区間。key photo がどの時刻に相当するかを示す。
+    // (C) still-image-time: 1 sample, value 0, duration 1/30s. Must be
+    // appended before the metadata input is marked finished.
     let stillItem = makeStillImageTimeMetadataItem()
     let stillGroup = AVTimedMetadataGroup(
       items: [stillItem],
       timeRange: CMTimeRangeMake(start: .zero, duration: CMTimeMake(value: 1, timescale: 30))
     )
     metadataAdaptor.append(stillGroup)
-    metadataAdaptor.assetWriterInput.markAsFinished()
     devLog("still-image-time metadata appended")
 
-    devLog("pump video start")
-    try await pump(input: videoInput, from: videoOutput, reader: reader, writer: writer, clipDuration: clipDuration, label: "video")
+    // ---- Video pump ----
+    devLog("pump video start (re-encode H.264)")
+    try await pump(
+      input: videoInput,
+      from: videoOutput,
+      reader: reader,
+      writer: writer,
+      clipDuration: clipDuration,
+      label: "video"
+    )
     devLog("pump video done")
     videoInput.markAsFinished()
+    metadataAdaptor.assetWriterInput.markAsFinished()
 
-    if let aIn = audioInput, let aOut = audioOutput {
-      devLog("pump audio start")
-      try await pump(input: aIn, from: aOut, reader: reader, writer: writer, clipDuration: clipDuration, label: "audio")
-      devLog("pump audio done")
-      aIn.markAsFinished()
-    }
-
+    // ---- Finish ----
     devLog("writer.finishWriting start")
     await writer.finishWriting()
     devLog("writer.finishWriting done status=\(writer.status.rawValue)")
@@ -379,21 +416,18 @@ enum LivePhotoExportPipeline {
 
   // MARK: - pump
   //
-  // Drains sample buffers from a reader output into a writer input.
+  // Continuation-based drain of sample buffers. The block registered via
+  // `requestMediaDataWhenReady` resumes the continuation exactly once
+  // (success, failure, or timeout). No DispatchSemaphore — the previous
+  // implementation blocked a global dispatch worker for 20s and was
+  // suspected of contributing to thread starvation.
   //
-  // Design notes:
-  //   - `requestMediaDataWhenReady` calls the block whenever the writer input
-  //     is ready to accept more data. The block runs until it signals `semaphore`
-  //     (end-of-stream, clip duration reached, append failure, or writer failure).
-  //   - clipDuration enforces the trim in PTS-space: the first valid PTS is
-  //     recorded as `firstPTS`, and the block stops once
-  //     (currentPTS - firstPTS) >= clipDuration. This avoids reader.timeRange,
-  //     which causes copyNextSampleBuffer() to block for 20+ seconds while
-  //     seeking in a compressed HEVC passthrough stream.
-  //   - We use DispatchSemaphore + semaphore.wait(timeout:) so a broken writer
-  //     (isReadyForMoreMediaData stuck false) cannot hang indefinitely.
-  //   - On timeout the error message includes reader/writer status codes visible
-  //     in the in-app Debug screen (NativeLivePhotoBridge.ts → lastError.message).
+  // Stops on:
+  //   - end-of-stream (copyNextSampleBuffer returns nil)
+  //   - elapsed PTS >= clipDuration (PTS-based trim)
+  //   - writer append failure
+  //   - writer terminal state (failed / cancelled)
+  //   - 20 second safety timeout
   private static let pumpTimeoutSeconds: Double = 20
 
   static func pump(
@@ -404,82 +438,94 @@ enum LivePhotoExportPipeline {
     clipDuration: Double,
     label: String
   ) async throws {
-    let semaphore = DispatchSemaphore(value: 0)
     let pumpQueue = DispatchQueue(label: "lp-pump-\(label)-\(UUID().uuidString)", qos: .userInitiated)
 
-    var firstPTS: Double? = nil
+    // Box for mutable state shared between continuation and GCD callback.
+    // @unchecked Sendable is safe because all access happens on pumpQueue.
+    final class State: @unchecked Sendable {
+      var firstPTS: Double? = nil
+      var sampleCount: Int = 0
+      var resumed: Bool = false
+    }
+    let state = State()
 
-    input.requestMediaDataWhenReady(on: pumpQueue) {
-      while input.isReadyForMoreMediaData {
-        // Bail out immediately if the writer has entered a terminal state.
-        if writer.status == .failed || writer.status == .cancelled {
-          devLog("pump(\(label)) writer terminal status=\(writer.status.rawValue) err=\(writer.error?.localizedDescription ?? "nil")")
-          semaphore.signal()
-          return
-        }
-        guard let buffer = output.copyNextSampleBuffer() else {
-          devLog("pump(\(label)) end-of-stream reader.status=\(reader.status.rawValue)")
-          semaphore.signal()
-          return
-        }
-        // PTS-based clip boundary check (replaces reader.timeRange seek).
-        let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
-        if pts.isValid {
-          if firstPTS == nil { firstPTS = pts.seconds }
-          let elapsed = pts.seconds - (firstPTS ?? pts.seconds)
-          if elapsed >= clipDuration {
-            devLog("pump(\(label)) clipDuration reached elapsed=\(String(format: "%.3f", elapsed))s >= \(clipDuration)s")
-            semaphore.signal()
-            return
+    try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+      let resumeOnce: (Result<Void, Error>) -> Void = { result in
+        pumpQueue.async {
+          guard !state.resumed else { return }
+          state.resumed = true
+          switch result {
+          case .success:
+            cont.resume(returning: ())
+          case .failure(let error):
+            cont.resume(throwing: error)
           }
         }
-        if !input.append(buffer) {
-          devLog("pump(\(label)) append failed")
-          semaphore.signal()
-          return
+      }
+
+      // Hard safety timeout so we never hang forever.
+      pumpQueue.asyncAfter(deadline: .now() + pumpTimeoutSeconds) {
+        let rs = reader.status.rawValue
+        let ws = writer.status.rawValue
+        let we = writer.error?.localizedDescription ?? "nil"
+        let msg = "pump_\(label)_timeout rs=\(rs) ws=\(ws) we=\(we) samples=\(state.sampleCount)"
+        devLog("PUMP TIMEOUT: \(msg)")
+        resumeOnce(.failure(NSError(
+          domain: "com.gen.videotolivephoto",
+          code: Int(rs * 10 + ws),
+          userInfo: [NSLocalizedDescriptionKey: msg]
+        )))
+      }
+
+      input.requestMediaDataWhenReady(on: pumpQueue) {
+        if state.resumed { return }
+        while input.isReadyForMoreMediaData {
+          // Writer went terminal → fail immediately.
+          if writer.status == .failed || writer.status == .cancelled {
+            let msg = "pump_\(label)_writer_terminal status=\(writer.status.rawValue) err=\(writer.error?.localizedDescription ?? "nil")"
+            devLog(msg)
+            resumeOnce(.failure(NSError(domain: "com.gen.videotolivephoto", code: -2,
+                                        userInfo: [NSLocalizedDescriptionKey: msg])))
+            return
+          }
+
+          guard let buffer = output.copyNextSampleBuffer() else {
+            // End-of-stream. If reader failed, surface the error.
+            if reader.status == .failed {
+              let msg = "pump_\(label)_reader_failed err=\(reader.error?.localizedDescription ?? "nil")"
+              devLog(msg)
+              resumeOnce(.failure(NSError(domain: "com.gen.videotolivephoto", code: -1,
+                                          userInfo: [NSLocalizedDescriptionKey: msg])))
+              return
+            }
+            devLog("pump(\(label)) end-of-stream samples=\(state.sampleCount)")
+            resumeOnce(.success(()))
+            return
+          }
+
+          // PTS-based clip boundary check.
+          let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
+          if pts.isValid {
+            if state.firstPTS == nil { state.firstPTS = pts.seconds }
+            let elapsed = pts.seconds - (state.firstPTS ?? pts.seconds)
+            if elapsed >= clipDuration {
+              devLog("pump(\(label)) clipDuration reached samples=\(state.sampleCount) elapsed=\(String(format: "%.3f", elapsed))s")
+              resumeOnce(.success(()))
+              return
+            }
+          }
+
+          if !input.append(buffer) {
+            let msg = "pump_\(label)_append_failed samples=\(state.sampleCount) writerErr=\(writer.error?.localizedDescription ?? "nil")"
+            devLog(msg)
+            resumeOnce(.failure(NSError(domain: "com.gen.videotolivephoto", code: -3,
+                                        userInfo: [NSLocalizedDescriptionKey: msg])))
+            return
+          }
+          state.sampleCount += 1
         }
+        // isReadyForMoreMediaData went false → system will re-invoke this block.
       }
-      // isReadyForMoreMediaData became false → requestMediaDataWhenReady will
-      // call this block again when the writer is ready for more data.
-    }
-
-    // Wait with a hard timeout so a permanently-stuck writer cannot hang
-    // the entire export pipeline forever.
-    let timedOut = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
-      DispatchQueue.global().async {
-        let result = semaphore.wait(timeout: .now() + pumpTimeoutSeconds)
-        cont.resume(returning: result == .timedOut)
-      }
-    }
-
-    if timedOut {
-      let rs = reader.status.rawValue
-      let ws = writer.status.rawValue
-      let we = writer.error?.localizedDescription ?? "nil"
-      // Embed rs/ws into the message so it surfaces in the in-app Debug screen
-      // (lastError.message) — the only Swift diagnostic visible on Windows.
-      let msg = "pump_\(label)_timeout rs=\(rs) ws=\(ws) we=\(we)"
-      devLog("PUMP TIMEOUT: \(msg)")
-      throw NSError(
-        domain: "com.gen.videotolivephoto",
-        code: Int(rs * 10 + ws),
-        userInfo: [NSLocalizedDescriptionKey: msg]
-      )
-    }
-
-    // Post-pump: surface any silent reader/writer failures that occurred
-    // after the semaphore was signalled (e.g. writer failed on the last write).
-    if reader.status == .failed {
-      let msg = "pump_\(label)_reader_failed: \(reader.error?.localizedDescription ?? "nil")"
-      devLog(msg)
-      throw NSError(domain: "com.gen.videotolivephoto", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: msg])
-    }
-    if writer.status == .failed {
-      let msg = "pump_\(label)_writer_failed: \(writer.error?.localizedDescription ?? "nil")"
-      devLog(msg)
-      throw NSError(domain: "com.gen.videotolivephoto", code: -2,
-                    userInfo: [NSLocalizedDescriptionKey: msg])
     }
   }
 
