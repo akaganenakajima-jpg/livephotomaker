@@ -1,5 +1,4 @@
 import * as VideoThumbnails from 'expo-video-thumbnails';
-import * as FileSystem from 'expo-file-system';
 import { Video } from 'expo-av';
 import type { ExportQuality } from '@/types/ExportQuality';
 import { qualityProfile } from '@/types/ExportQuality';
@@ -53,15 +52,11 @@ export const createVideoProcessingService = (): VideoProcessingService => ({
       quality: profile.jpegCompression,
     });
 
-    // Step 2: copy the source MOV to a working file.
-    // The native module receives startSeconds/endSeconds and applies the
-    // trim via AVAssetReader.timeRange — no re-encoding, just passthrough
-    // within the specified range. This keeps the JS layer simple.
-    const workingDir = `${FileSystem.cacheDirectory}livephoto-${Date.now()}/`;
-    await FileSystem.makeDirectoryAsync(workingDir, { intermediates: true });
-    const movUri = `${workingDir}source.mov`;
-    await FileSystem.copyAsync({ from: sourceUri, to: movUri });
-
-    return { movUri, stillUri, durationSeconds: endSeconds - startSeconds };
+    // Step 2: pass the source URI directly to the native module.
+    // Swift reads only the [startSeconds, endSeconds] segment via
+    // AVAssetReader.timeRange — no full-file copy needed here.
+    // The native side creates tagged tmp files and saves those to Photos;
+    // the original source file is never moved.
+    return { movUri: sourceUri, stillUri, durationSeconds: endSeconds - startSeconds };
   },
 });
